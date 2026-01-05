@@ -222,13 +222,16 @@ with gr.Blocks(title="Sistem Pakar Gizi Posyandu") as demo:
     )
 
 if __name__ == "__main__":
-    share_link = False
-
+    import os
     import argparse
+
+    share_link = False
+    server_port = int(os.getenv("PORT", 7860))
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--share", action="store_true", help="Meong")
     args = parser.parse_args()
     if args.share:
         share_link = True
     
-    demo.launch(server_name="127.0.0.1", server_port=7860, theme=gr.themes.Default(), share=share_link)
+    demo.launch(server_name="127.0.0.1", server_port=server_port, theme=gr.themes.Default(), share=share_link)
