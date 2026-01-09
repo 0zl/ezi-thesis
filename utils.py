@@ -117,7 +117,7 @@ def get_z_scores(
 
     # --- 1. BB/U (Berat-per-Umur) ---
     # Filter by gender, index_type='BB_U', dan umur
-    # Catatan: umur di std_age.csv biasanya sampe 60 bulan buat balita, tapi di dataset cuman sampe 18-19 tahun.
+    # umur di std_age.csv biasanya sampe 60 bulan buat balita.
 
     row_bb_u = DF_AGE[
         (DF_AGE["gender"] == gender)
@@ -169,6 +169,16 @@ def get_z_scores(
     # (Software medis beneran mungkin interpolasi, tapi 0.5 ok lah buat tool dasar) meong
     lookup_height = round(corrected_height * 2) / 2
 
+    # Logika Fallback untuk Stunting Parah (TB < 65cm untuk Usia >= 24 bulan)
+    # Grafik Berdiri (BB/TB) WHO baru mulai dari 65cm.
+    # Jika balita > 2 tahun sangat pendek (< 65cm), kita HARUS kembali pakai grafik Terlentang (BB/PB) (45-110cm).
+    if index_type_wfh == "BB_TB" and lookup_height < 65.0:
+        index_type_wfh = "BB_PB"
+
+    # Penanganan Data Hilang (Contoh: Gap laki-laki 68.5-71.0cm)
+    # Daripada cuma lookup biasa, kita coba lookup dulu, kalau kosong baru interpolasi.
+
+    # 1. Coba Pencarian Persis (Exact Match)
     row_bb_tb = DF_HEIGHT[
         (DF_HEIGHT["gender"] == gender)
         & (DF_HEIGHT["index_type"] == index_type_wfh)
@@ -176,11 +186,42 @@ def get_z_scores(
     ]
 
     z_bb_tb = None
+    ref_median, ref_sd_n1, ref_sd_p1 = None, None, None
+
     if not row_bb_tb.empty:
-        median = row_bb_tb.iloc[0]["median"]
-        sd_n1 = row_bb_tb.iloc[0]["sd_n1"]
-        sd_p1 = row_bb_tb.iloc[0]["sd_p1"]
-        z_bb_tb = _calculate_z(weight, median, sd_n1, sd_p1)
+        ref_median = row_bb_tb.iloc[0]["median"]
+        ref_sd_n1 = row_bb_tb.iloc[0]["sd_n1"]
+        ref_sd_p1 = row_bb_tb.iloc[0]["sd_p1"]
+    else:
+        # 2. Coba Interpolasi
+        # Filter berdasarkan gender/tipe yang sesuai dulu
+        df_subset = DF_HEIGHT[
+            (DF_HEIGHT["gender"] == gender)
+            & (DF_HEIGHT["index_type"] == index_type_wfh)
+        ].sort_values("height_cm")
+
+        # Cari tetangga terdekat (atas dan bawah)
+        lower = df_subset[df_subset["height_cm"] < lookup_height].tail(1)
+        upper = df_subset[df_subset["height_cm"] > lookup_height].head(1)
+
+        if not lower.empty and not upper.empty:
+            # Ambil nilai
+
+            h1 = lower.iloc[0]["height_cm"]
+            h2 = upper.iloc[0]["height_cm"]
+
+            # Fungsi bantu interpolasi linear
+            def interp(col: str) -> float:
+                y1 = lower.iloc[0][col]
+                y2 = upper.iloc[0][col]
+                return y1 + (y2 - y1) * ((lookup_height - h1) / (h2 - h1))
+
+            ref_median = interp("median")
+            ref_sd_n1 = interp("sd_n1")
+            ref_sd_p1 = interp("sd_p1")
+
+    if ref_median is not None:
+        z_bb_tb = _calculate_z(weight, ref_median, ref_sd_n1, ref_sd_p1)
 
     return {
         "age_months": age_months,
@@ -271,6 +312,12 @@ def get_wfh_chart_data(gender: str, mode: str):
     # Tentukan Index Type berdasarkan mode
     # Terlentang -> BB_PB (Weight for Length)
     # Berdiri -> BB_TB (Weight for Height)
+
+    # LOGIKA STUNTING PARAH
+    # Fungsi ini hanya untuk mengambil data grafik visualisasi.
+    # Pengecekan fallback logis untuk perhitungan Z-score ada di fungsi `get_z_scores`.
+    # Di sini kita hanya mengembalikan dataset yang diminta chart.
+
     index_type = "BB_PB" if mode == "recumbent" else "BB_TB"
 
     df_wfh = DF_HEIGHT[

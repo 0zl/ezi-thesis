@@ -20,9 +20,11 @@ def analyze_gizi(nama, dob_str, gender, weight, height, measure_mode):
             return (
                 None,
                 None,
-                None,
+                [],
                 "Tinggi badan tidak valid (Range: 10cm - 200cm).",
                 "Input Error",
+                None,
+                None,
                 None,
             )
 
@@ -30,9 +32,11 @@ def analyze_gizi(nama, dob_str, gender, weight, height, measure_mode):
             return (
                 None,
                 None,
-                None,
+                [],
                 "Berat badan tidak valid (Range: 1kg - 100kg).",
                 "Input Error",
+                None,
+                None,
                 None,
             )
 
@@ -46,27 +50,31 @@ def analyze_gizi(nama, dob_str, gender, weight, height, measure_mode):
         corrected_height = z_results["corrected_height"]
 
         # 2. Inferensi Fuzzy
-        if z_bb_u is None or z_tb_u is None:
+        if z_bb_u is None or z_tb_u is None or z_bb_tb is None:
             return (
                 age_months,
                 corrected_height,
-                None,
+                [],
                 "Data diluar jangkauan standar.",
                 "Tidak Dapat Dianalisa",
                 None,
+                None,
+                None,
             )
 
-        fuzzy_score, fuzzy_label = fuzzy_system.predict(z_bb_u, z_tb_u)
+        # 4. Logika Fuzzy
+        # Sekarang menggunakan 3 parameter: BB/U, TB/U, dan BB/TB
+        fuzzy_score, fuzzy_label = fuzzy_system.predict(z_bb_u, z_tb_u, z_bb_tb)
 
         # 3. Logika Rekomendasi
         rekomendasi = ""
-        if fuzzy_label == "Gizi Buruk":
+        if fuzzy_label.startswith("Gizi Buruk"):
             rekomendasi = "SEGERA RUJUK KE PUSKESMAS/RS. Perlu penanganan medis segera."
         elif fuzzy_label == "Gizi Kurang":
             rekomendasi = "Perlu Pemberian Makanan Tambahan (PMT) pemulihan dan konseling gizi rutin."
         elif fuzzy_label == "Gizi Baik":
             rekomendasi = "Pertahankan pola asuh dan pola makan yang baik. Pantau pertumbuhan diposyandu setiap bulan."
-        elif fuzzy_label == "Gizi Lebih":
+        elif fuzzy_label.startswith("Gizi Lebih"):
             rekomendasi = "Konsultasikan diet seimbang. Kurangi makanan manis/berlemak, tingkatkan aktivitas fisik."
 
         z_score_data = [
@@ -251,11 +259,10 @@ def analyze_gizi(nama, dob_str, gender, weight, height, measure_mode):
             margin=dict(l=40, r=20, t=60, b=40),
         )
 
-        # 7. Visualisasi Weight-for-Length/Height (BB/TB atau BB/PB)
+        # 7. Visualisasi Berat-per-Tinggi/Panjang (BB/TB atau BB/PB)
         chart_data_wfh = utils.get_wfh_chart_data(gender_code, mode_code)
         fig3 = go.Figure()
 
-        wfh_title = "BB/TB" if mode_code == "standing" else "BB/PB"
         x_label = (
             "Tinggi Badan (cm)" if mode_code == "standing" else "Panjang Badan (cm)"
         )
@@ -352,7 +359,7 @@ def analyze_gizi(nama, dob_str, gender, weight, height, measure_mode):
         )
 
     except Exception as e:
-        return None, None, None, f"Error: {str(e)}", "Error", None
+        return None, None, [], f"Error: {str(e)}", "Error", None, None, None
 
 
 def simpan_data(nama, dob, gender, weight, height, status, recommendation):
