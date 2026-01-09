@@ -165,7 +165,7 @@ class MalnutritionFuzzySystem:
         label = "Tidak Diketahui"
         if score <= 25:
             label = "Gizi Buruk"
-        elif score <= 55:
+        elif score <= 50:
             label = "Gizi Kurang"
         elif score <= 80:
             label = "Gizi Baik"
